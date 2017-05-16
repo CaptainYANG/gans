@@ -32,6 +32,7 @@ class DCGAN(object):
   self.d_bn1 = batch_norm(name='d_bn1')
   self.d_bn2 = batch_norm(name='d_bn2')
 
+
 	if not self.y_dim:
 	  self.d_bn3 = batch_norm(name='d_bn3')
 	  self.g_bn0 = batch_norm(name='g_bn0')
@@ -94,4 +95,83 @@ class DCGAN(object):
     self.g_vars = [var for var in t_vars if 'g_' in var.name]
 
     self.saver = tf.train.Saver()
+
+    def train(self, config):
+    	data_X, data_y = self.load_mnist()
+    	d_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
+    	.minimize(self.d_loss, var_list=self.d_vars)
+      g_optim = tf.train.AdamOptimizer(config.learning_rate, beta1=config.beta1) \
+      .minimize(self.g_loss, var_list=self.g_vars)
+
+      try:
+      	tf.global_variables_initializer().run()
+      except:
+      	tf.initialize_all_variables().run()
+
+      self.g_sum = merge_summary([self.z_sum, self.d__sum,
+      	self.G_sum, self.d_loss_fake_sum, self.g_loss_sum])
+      self.d_sum = merge_summary(
+        [self.z_sum, self.d_sum, self.d_loss_real_sum, self.d_loss_sum])
+      self.writer = SummaryWriter("./logs", self.sess.graph)
+
+      sample_z = np.random.uniform(-1, 1, size=(self.sample_num , self.z_dim))
+      sample_inputs = data_X[0:self.sample_num]
+      sample_labels = data_y[0:self.sample_num]
+
+      counter = 1
+      start_time = time.time()
+      could_load, checkpoint_counter = self.load(self.checkpoint_dir)
+      if could_load:
+      	counter = checkpoint_counter
+      	print(" [*] Load SUCCESS")
+      else:
+      	print(" [!] Load failed...")
+
+      for epoch in xrange(config.epoch):
+      	batch_idxs = min(len(data_X), config.train_size) // config.batch_size
+      	for idx in xrange(0, batch_idxs):
+      		batch_images = data_X[idx*config.batch_size:(idx+1)*config.batch_size]
+      		batch_labels = data_y[idx*config.batch_size:(idx+1)*config.batch_size]
+      		batch_z = np.random.uniform(-1, 1, [config.batch_size, self.z_dim]) \
+      		.astype(np.float32)
+      		#update d 
+      		_, summary_str = self.sess.run([d_optim, self.d_sum],
+      			feed_dict={
+      			self.inputs: batch_images,
+      			self.z: batch_z,
+      			self.y: batch_labels,
+      			})
+      		self.writer.add_summary(summary_str, counter)
+
+      		#update g twice  y?
+      		_, summary_str = self.sess.run([g_optim, self.g_sum],
+            feed_dict={
+              self.z: batch_z, 
+              self.y:batch_labels,
+            })
+          self.writer.add_summary(summary_str, counter)
+
+          _, summary_str = self.sess.run([g_optim, self.g_sum],
+            feed_dict={
+              self.z: batch_z, 
+              self.y:batch_labels,
+            })
+          self.writer.add_summary(summary_str, counter)
+
+          errD_fake = self.d_loss_fake.eval({
+              self.z: batch_z, 
+              self.y:batch_labels
+          })
+          errD_real = self.d_loss_real.eval({
+              self.inputs: batch_images,
+              self.y:batch_labels
+          })
+          errG = self.g_loss.eval({
+              self.z: batch_z,
+              self.y: batch_labels
+          })
+          counter += 1
+          print("Epoch: [%2d] [%4d/%4d] time: %4.4f, d_loss: %.8f, g_loss: %.8f" \
+          	% (epoch, idx, batch_idxs,
+            time.time() - start_time, errD_fake+errD_real, errG))
 
