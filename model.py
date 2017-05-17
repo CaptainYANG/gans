@@ -175,3 +175,44 @@ class DCGAN(object):
           	% (epoch, idx, batch_idxs,
             time.time() - start_time, errD_fake+errD_real, errG))
 
+        if np.mod(counter, 100) == 1:
+          if config.dataset == 'mnist':
+            samples, d_loss, g_loss = self.sess.run(
+              [self.sampler, self.d_loss, self.g_loss],
+              feed_dict={
+                  self.z: sample_z,
+                  self.inputs: sample_inputs,
+                  self.y:sample_labels,
+              }
+            )
+            # save samples
+            manifold_h = int(np.ceil(np.sqrt(samples.shape[0])))
+            manifold_w = int(np.floor(np.sqrt(samples.shape[0])))
+            save_images(samples, [manifold_h, manifold_w],
+                  './{}/train_{:02d}_{:04d}.png'.format(config.sample_dir, epoch, idx))
+            print("[Sample] d_loss: %.8f, g_loss: %.8f" % (d_loss, g_loss)) 
+
+        if np.mod(counter, 500) == 2:
+          self.save(config.checkpoint_dir, counter)
+
+  def discriminator(self, image, y=None, reuse=False):
+    with tf.variable_scope("discriminator") as scope:
+      if reuse:
+        scope.reuse_variables()
+      yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+      x = conv_cond_concat(image, yb)
+
+      h0 = lrelu(conv2d(x, self.c_dim + self.y_dim, name='d_h0_conv'))
+      h0 = conv_cond_concat(h0, yb)
+
+      h1 = lrelu(self.d_bn1(conv2d(h0, self.df_dim + self.y_dim, name='d_h1_conv')))
+      h1 = tf.reshape(h1, [self.batch_size, -1])      
+      h1 = concat([h1, y], 1)
+      
+      h2 = lrelu(self.d_bn2(linear(h1, self.dfc_dim, 'd_h2_lin')))
+      h2 = concat([h2, y], 1)
+
+      h3 = linear(h2, 1, 'd_h3_lin')
+      
+      return tf.nn.sigmoid(h3), h3
+
