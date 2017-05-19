@@ -234,7 +234,7 @@ class DCGAN(object):
     		linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin')))
     	h1 = tf.reshape(h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
     	h1 = conv_cond_concat(h1, yb)
-    	
+
     	h2 = tf.nn.relu(self.g_bn2(deconv2d(h1,
     		[self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2')))
     	h2 = conv_cond_concat(h2, yb)
@@ -242,3 +242,56 @@ class DCGAN(object):
     	return tf.nn.sigmoid(
     		deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
 
+   def sampler(self, z, y=None):
+   	with tf.variable_scope("generator") as scope:
+   		scope.reuse_variables()
+   		s_h, s_w = self.output_height, self.output_width
+   		s_h2, s_h4 = int(s_h/2), int(s_h/4)
+   		s_w2, s_w4 = int(s_w/2), int(s_w/4)
+   		yb = tf.reshape(y, [self.batch_size, 1, 1, self.y_dim])
+   		z = concat([z, y], 1)
+
+   		h0 = tf.nn.relu(self.g_bn0(linear(z, self.gfc_dim, 'g_h0_lin'), train=False))
+   		h0 = concat([h0, y], 1)
+   		h1 = tf.nn.relu(self.g_bn1(
+   			linear(h0, self.gf_dim*2*s_h4*s_w4, 'g_h1_lin'), train=False))
+   		h1 = tf.reshape(h1, [self.batch_size, s_h4, s_w4, self.gf_dim * 2])
+   		h1 = conv_cond_concat(h1, yb)
+
+   		h2 = tf.nn.relu(self.g_bn2(
+   			deconv2d(h1, [self.batch_size, s_h2, s_w2, self.gf_dim * 2], name='g_h2'), train=False))
+   		h2 = conv_cond_concat(h2, yb)
+   		return tf.nn.sigmoid(deconv2d(h2, [self.batch_size, s_h, s_w, self.c_dim], name='g_h3'))
+
+   def load_mnist(self):
+   	data_dir = os.path.join("./data", self.dataset_name)
+   	fd = open(os.path.join(data_dir,'train-images-idx3-ubyte'))
+   	loaded = np.fromfile(file=fd,dtype=np.uint8)
+   	trX = loaded[16:].reshape((60000,28,28,1)).astype(np.float)
+
+   	fd = open(os.path.join(data_dir,'train-labels-idx1-ubyte'))
+   	loaded = np.fromfile(file=fd,dtype=np.uint8)
+   	trY = loaded[8:].reshape((60000)).astype(np.float)
+
+   	fd = open(os.path.join(data_dir,'t10k-images-idx3-ubyte'))
+   	loaded = np.fromfile(file=fd,dtype=np.uint8)
+   	teX = loaded[16:].reshape((10000,28,28,1)).astype(np.float)
+
+   	fd = open(os.path.join(data_dir,'t10k-labels-idx1-ubyte'))
+   	loaded = np.fromfile(file=fd,dtype=np.uint8)
+   	teY = loaded[8:].reshape((10000)).astype(np.float)
+
+   	trY = np.asarray(trY)
+   	teY = np.asarray(teY)
+   	X = np.concatenate((trX, teX), axis=0)
+   	y = np.concatenate((trY, teY), axis=0).astype(np.int)
+   	seed = 547
+   	np.random.seed(seed)
+   	np.random.shuffle(X)
+   	np.random.seed(seed)
+   	np.random.shuffle(y)
+
+   	y_vec = np.zeros((len(y), self.y_dim), dtype=np.float)
+   	for i, label in enumerate(y):
+   		y_vec[i,y[i]] = 1.0
+   	return X/255.,y_vec
