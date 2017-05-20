@@ -294,4 +294,36 @@ class DCGAN(object):
    	y_vec = np.zeros((len(y), self.y_dim), dtype=np.float)
    	for i, label in enumerate(y):
    		y_vec[i,y[i]] = 1.0
+
    	return X/255.,y_vec
+
+   @property
+   def model_dir(self):
+   	return "{}_{}_{}_{}".format(
+   		self.dataset_name, self.batch_size,
+   		self.output_height, self.output_width)
+
+   def save(self, checkpoint_dir, step):
+   	model_name = "DCGAN.model"
+   	checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+   	if not os.path.exists(checkpoint_dir):
+   		os.makedirs(checkpoint_dir)
+
+   	self.saver.save(self.sess,
+   		os.path.join(checkpoint_dir, model_name),
+   		global_step=step)
+
+   	def load(self, checkpoint_dir):
+   		import re
+   		print(" [*] Reading checkpoints...")
+   		checkpoint_dir = os.path.join(checkpoint_dir, self.model_dir)
+   		ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+   		if ckpt and ckpt.model_checkpoint_path:
+   			ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+   			self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
+   			counter = int(next(re.finditer("(\d+)(?!.*\d)",ckpt_name)).group(0))
+   			print(" [*] Success to read {}".format(ckpt_name))
+   			return True, counter
+   		else:
+   			print(" [*] Failed to find a checkpoint")
+   			return False, 0
