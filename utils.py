@@ -51,3 +51,6 @@ def center_crop(x, crop_h, crop_w,
   i = int(round((w - crop_w)/2.))
   return scipy.misc.imresize(
       x[j:j+crop_h, i:i+crop_w], [resize_h, resize_w])
+  
+def save_images(images, size, image_path):
+  return imsave(inverse_transform(images), size, image_path)
